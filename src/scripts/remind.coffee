@@ -1,9 +1,8 @@
 # Description:
-#   Remind to someone something
+#   Create and manage reminders
 #
 # Commands:
-#   hubot remind to <user> in #s|m|h|d to <something to remind> - remind to someone something in a given time eg 5m for five minutes
-#   hubot what will you remind - Show active reminders
+#   hubot remind <user> in <number> <units> to <do something>
 #   hubot what are your reminders - Show active reminders
 #   hubot forget|rm reminder <id> - Remove a given reminder
 
@@ -27,17 +26,17 @@ timeWords = {
   'days': 'day'
 }
 
-createNewJob = (robot, pattern, user, message) ->
+createNewJob = (robot, pattern, user, message, origin) ->
   id = Math.floor(Math.random() * 1000000) while !id? || JOBS[id]
-  job = registerNewJob robot, id, pattern, user, message
+  job = registerNewJob robot, id, pattern, user, message, origin
   robot.brain.data.things[id] = job.serialize()
   id
 
-registerNewJobFromBrain = (robot, id, pattern, user, message) ->
-  registerNewJob(robot, id, pattern, user, message)
+registerNewJobFromBrain = (robot, id, pattern, user, message, origin) ->
+  registerNewJob(robot, id, pattern, user, message, origin)
 
-registerNewJob = (robot, id, pattern, user, message) ->
-  job = new Job(id, pattern, user, message)
+registerNewJob = (robot, id, pattern, user, message, origin) ->
+  job = new Job(id, pattern, user, message, origin)
   job.start(robot)
   JOBS[id] = job
 
@@ -50,8 +49,8 @@ unregisterJob = (robot, id)->
   no
 
 handleNewJob = (robot, msg, user, pattern, message) ->
-    id = createNewJob robot, pattern, user, message
-    msg.send "Got it! I will remind to #{user.name} at #{pattern}"
+    id = createNewJob robot, pattern, user, message, msg.message
+    msg.send "Got it! I will remind #{user.name} at #{pattern}"
 
 module.exports = (robot) ->
   robot.brain.data.things or= {}
@@ -82,7 +81,7 @@ module.exports = (robot) ->
         else
           msg.send "i can't forget it, maybe i need a headshrinker"
 
-  robot.respond new RegExp('remind (.*) in (\\d+) ?(' + Object.keys(timeWords).join('|') + ') to (.*)', 'i'), (msg) ->
+  robot.respond new RegExp('remind (?:@)?(.*) in (\\d+) ?(' + Object.keys(timeWords).join('|') + ') to (.*)', 'i'), (msg) ->
     name = msg.match[1]
     at = msg.match[2]
     time = msg.match[3]
@@ -107,7 +106,7 @@ module.exports = (robot) ->
 
 
 class Job
-  constructor: (id, pattern, user, message) ->
+  constructor: (id, pattern, user, message, origin) ->
     @id = id
     @pattern = pattern
     # cloning user because adapter may touch it later
@@ -115,6 +114,7 @@ class Job
     clonedUser[k] = v for k,v of user
     @user = clonedUser
     @message = message
+    @metadata = origin?.metadata
 
   start: (robot) ->
     @cronjob = new cronJob(@pattern, =>
@@ -127,14 +127,15 @@ class Job
     @cronjob.stop()
 
   serialize: ->
-    [@pattern, @user, @message]
+    [@pattern, @user, @message, @metadata]
 
   sendMessage: (robot) ->
     envelope = user: @user, room: @user.room
+    if(@metadata?)
+      envelope.metadata = @metadata
     message = @message
     if @user.mention_name
       message = "Hey @#{envelope.user.mention_name} remember: " + @message
     else
       message = "Hey @#{envelope.user.name} remember: " + @message
     robot.send envelope, message
-
