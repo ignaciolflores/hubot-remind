@@ -81,7 +81,7 @@ module.exports = (robot) ->
         else
           msg.send "i can't forget it, maybe i need a headshrinker"
 
-  robot.respond new RegExp('remind (?:@)?(.*) in (\\d+) ?(' + Object.keys(timeWords).join('|') + ') to (.*)', 'i'), (msg) ->
+  robot.respond /remind (.*) in (\d+)([s|m|h|d]) to (.*)/i, (msg) ->
     name = msg.match[1]
     at = msg.match[2]
     time = msg.match[3]
@@ -90,7 +90,6 @@ module.exports = (robot) ->
     if /^me$/i.test(name.trim())
       users = [msg.message.user]
     else
-      name = name.replace 'to ', ''
       users = robot.brain.usersForFuzzyName(name)
 
     if users.length is 1
